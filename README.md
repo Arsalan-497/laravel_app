@@ -204,6 +204,84 @@ Visit the app in your browser:
 http://your-server-ip
 ```
 
+## Troubleshooting
+ 
+### `composer install` fails: package "does not satisfy" PHP 8.3
+ 
+**Symptoms**
+ 
+```
+nette/schema v1.2.2 requires php >=7.1 <8.2 -> your php version (8.3.x) does not satisfy that requirement.
+```
+ 
+The same error can appear for `nette/utils`, `phpspec/prophecy`, and `league/config`.
+ 
+**Cause:** `composer.lock` pins old package versions that cap PHP below 8.2.
+ 
+**Fix:** update the offending packages:
+ 
+```bash
+composer update nette/schema nette/utils phpspec/prophecy league/config --with-dependencies
+```
+ 
+If other packages still conflict, run a full update and test the app afterwards:
+ 
+```bash
+composer update
+```
+ 
+Also check `composer.json` for exact version pins or a `config.platform.php` override that forces an older PHP version.
+ 
+> Avoid `composer install --ignore-platform-reqs` as a permanent fix. The old versions were not tested on PHP 8.2+ and may break at runtime.
+ 
+Once everything works, commit the updated `composer.lock` so that fresh clones install without this problem.
+ 
+### `Carbon::setLastErrors(): Argument #1 ($lastErrors) must be of type array, false given`
+ 
+**Cause:** an old `nesbot/carbon` version is incompatible with PHP 8.2+. It usually appears when seeding, because factories call `now()`.
+ 
+**Fix:**
+ 
+```bash
+composer update nesbot/carbon --with-dependencies
+php artisan config:clear
+php artisan migrate:fresh --seed
+```
+ 
+### `SQLSTATE[HY000] [1698] Access denied for user 'root'@'localhost'`
+ 
+**Cause:** on Ubuntu, MySQL's `root` user uses `auth_socket` authentication, so Laravel cannot log in as `root` with a password.
+ 
+**Fix:** use a dedicated database user as described in [Database Setup](#database-setup), then update `.env` and run:
+ 
+```bash
+php artisan config:clear
+php artisan migrate
+```
+ 
+If you must use `root` on a local dev machine, set a password for it first:
+ 
+```sql
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'your_password';
+FLUSH PRIVILEGES;
+```
+ 
+(On MySQL 8.4+, drop `WITH mysql_native_password`. On MariaDB use `IDENTIFIED VIA mysql_native_password USING PASSWORD('your_password')`.) This is not recommended on a server, because `root` has access to every database.
+ 
+### `SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '...' for key 'users.users_email_unique'`
+ 
+**Cause:** the seeder ran before (or partially ran), and the default user already exists.
+ 
+**Fix:** reset the database and reseed (**deletes all data**):
+ 
+```bash
+php artisan migrate:fresh --seed
+```
+ 
+If it still fails on a fresh database, the seeder or factory is creating the same email twice. Check `database/seeders/DatabaseSeeder.php` and make sure `UserFactory` uses `fake()->unique()->safeEmail()`.
+ 
+---
+
 ---
 
 <img width="1900" height="892" alt="image" src="https://github.com/user-attachments/assets/3289a7e4-c1ee-4054-9bc6-2bf7e5f33904" />
